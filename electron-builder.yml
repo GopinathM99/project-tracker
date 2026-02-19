@@ -1,0 +1,66 @@
+appId: com.projecttracker.app
+productName: Project Tracker
+copyright: Copyright © 2026 Project Tracker
+
+directories:
+  buildResources: resources
+  output: dist
+
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!tests/*'
+  - '!docs/*'
+  - '!.env*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintrc.cjs,.prettierrc,tsconfig*.json}'
+  - '!{.gitignore,.gitattributes}'
+  - '!firebase.json'
+  - '!firestore.*'
+
+# macOS
+mac:
+  category: public.app-category.productivity
+  target:
+    - dmg
+    - zip
+  artifactName: '${productName}-${version}-${arch}.${ext}'
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # Code signing: set CSC_LINK and CSC_KEY_PASSWORD env vars
+  # Notarization: set APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID env vars
+
+dmg:
+  artifactName: '${productName}-${version}.${ext}'
+
+afterSign: build/notarize.cjs
+
+# Windows
+win:
+  target:
+    - nsis
+    - zip
+  artifactName: '${productName}-${version}-setup.${ext}'
+  # Code signing: set CSC_LINK and CSC_KEY_PASSWORD env vars for Windows EV cert
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+
+# Linux
+linux:
+  target:
+    - AppImage
+    - deb
+  category: ProjectManagement
+  artifactName: '${productName}-${version}.${ext}'
+
+# Auto-update (requires electron-updater — placeholder for future)
+# publish:
+#   provider: github
+#   owner: your-org
+#   repo: project-tracker

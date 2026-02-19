@@ -1,0 +1,198 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper Functions ────────────────────────────────────────────
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Fetch the member doc for the requesting user within a workspace.
+    // This is a single get() call; all permission checks flow through it
+    // to stay within Firestore's 10 document-access-per-rule limit.
+    function getMember(workspaceId) {
+      return get(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid));
+    }
+
+    function isActiveMember(workspaceId) {
+      return isAuthenticated() &&
+             getMember(workspaceId).data.status == 'Active';
+    }
+
+    function getMemberRole(workspaceId) {
+      return getMember(workspaceId).data.role;
+    }
+
+    function isOwner(workspaceId) {
+      return isActiveMember(workspaceId) && getMemberRole(workspaceId) == 'Owner';
+    }
+
+    function isMemberOrOwner(workspaceId) {
+      return isActiveMember(workspaceId) &&
+             (getMemberRole(workspaceId) == 'Owner' || getMemberRole(workspaceId) == 'Member');
+    }
+
+    // ─── Workspace Document ──────────────────────────────────────────
+
+    match /workspaces/{workspaceId} {
+      // Any active member can read the workspace document
+      allow read: if isActiveMember(workspaceId);
+      // Any authenticated user can create a new workspace
+      allow create: if isAuthenticated();
+      // Only the Owner can update workspace settings
+      allow update: if isOwner(workspaceId);
+      // No client-side hard deletes
+      allow delete: if false;
+
+      // ─── Members Subcollection ───────────────────────────────────
+
+      match /members/{userId} {
+        allow read: if isActiveMember(workspaceId);
+        // Owner can create members.
+        // Special case: during invite acceptance a user creates their own member doc.
+        allow create: if isOwner(workspaceId) ||
+                        (isAuthenticated() && userId == request.auth.uid);
+        // Only the Owner can update member docs (role changes, suspension, etc.)
+        allow update: if isOwner(workspaceId);
+        allow delete: if false;
+      }
+
+      // ─── Invites Subcollection ───────────────────────────────────
+
+      match /invites/{inviteId} {
+        allow read: if isActiveMember(workspaceId);
+        // Only Owner can create invites
+        allow create: if isOwner(workspaceId);
+        // Owner can update (revoke). Authenticated users can update during
+        // invite acceptance (setting accepted_by_user_id, status, etc.)
+        allow update: if isOwner(workspaceId) ||
+                        isAuthenticated();
+        allow delete: if false;
+      }
+
+      // ─── Projects ────────────────────────────────────────────────
+
+      match /projects/{projectId} {
+        allow read: if isActiveMember(workspaceId);
+        allow create, update: if isMemberOrOwner(workspaceId);
+        allow delete: if false;
+      }
+
+      // ─── Tasks ───────────────────────────────────────────────────
+
+      match /tasks/{taskId} {
+        allow read: if isActiveMember(workspaceId);
+        allow create, update: if isMemberOrOwner(workspaceId);
+        allow delete: if false;
+      }
+
+      // ─── Bugs ────────────────────────────────────────────────────
+
+      match /bugs/{bugId} {
+        allow read: if isActiveMember(workspaceId);
+        allow create, update: if isMemberOrOwner(workspaceId);
+        allow delete: if false;
+      }
+
+      // ─── Comments ────────────────────────────────────────────────
+      // Only the comment author can update their own comment.
+
+      match /comments/{commentId} {
+        allow read: if isActiveMember(workspaceId);
+        allow create: if isMemberOrOwner(workspaceId);
+        allow update: if isMemberOrOwner(workspaceId) &&
+                        resource.data.author_user_id == request.auth.uid;
+        allow delete: if false;
+      }
+
+      // ─── Milestones ──────────────────────────────────────────────
+
+      match /milestones/{milestoneId} {
+        allow read: if isActiveMember(workspaceId);
+        allow create, update: if isMemberOrOwner(workspaceId);
+        allow delete: if false;
+      }
+
+      // ─── Folders ─────────────────────────────────────────────────
+
+      match /folders/{folderId} {
+        allow read: if isActiveMember(workspaceId);
+        allow create, update: if isMemberOrOwner(workspaceId);
+        allow delete: if false;
+      }
+
+      // ─── Tags ────────────────────────────────────────────────────
+
+      match /tags/{tagId} {
+        allow read: if isActiveMember(workspaceId);
+        allow create, update: if isMemberOrOwner(workspaceId);
+        allow delete: if false;
+      }
+
+      // ─── Attachments ─────────────────────────────────────────────
+
+      match /attachments/{attachmentId} {
+        allow read: if isActiveMember(workspaceId);
+        allow create, update: if isMemberOrOwner(workspaceId);
+        allow delete: if false;
+      }
+
+      // ─── Dependency Links ────────────────────────────────────────
+
+      match /dependency-links/{linkId} {
+        allow read: if isActiveMember(workspaceId);
+        allow create, update: if isMemberOrOwner(workspaceId);
+        allow delete: if false;
+      }
+
+      // ─── Entity Links ────────────────────────────────────────────
+
+      match /entity-links/{linkId} {
+        allow read: if isActiveMember(workspaceId);
+        allow create, update: if isMemberOrOwner(workspaceId);
+        allow delete: if false;
+      }
+
+      // ─── Recurring Task Definitions ──────────────────────────────
+
+      match /recurring-task-definitions/{definitionId} {
+        allow read: if isActiveMember(workspaceId);
+        allow create, update: if isMemberOrOwner(workspaceId);
+        allow delete: if false;
+      }
+
+      // ─── Activity Events ─────────────────────────────────────────
+
+      match /activity-events/{eventId} {
+        allow read: if isActiveMember(workspaceId);
+        allow create, update: if isMemberOrOwner(workspaceId);
+        allow delete: if false;
+      }
+
+      // ─── Notifications ───────────────────────────────────────────
+      // Any active member can read. Members/Owners can create.
+      // Users can update their own notifications (e.g. marking as read).
+
+      match /notifications/{notificationId} {
+        allow read: if isActiveMember(workspaceId);
+        allow create: if isMemberOrOwner(workspaceId);
+        allow update: if isActiveMember(workspaceId) &&
+                        resource.data.recipient_user_id == request.auth.uid;
+        allow delete: if false;
+      }
+    }
+
+    // ─── User Preferences (top-level, user-scoped) ──────────────────
+
+    match /user-preferences/{userId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ─── Deny Everything Else ────────────────────────────────────────
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
